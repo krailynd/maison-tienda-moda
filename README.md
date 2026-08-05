@@ -2,8 +2,6 @@
 
 > Frontend completo de una tienda de moda online premium: cinematográfico, táctil y elegante. React + TypeScript + Tailwind, con spring physics, smooth scroll y fotografía editorial generada con IA.
 
-![Hero](public/images/hero.png)
-
 ## Qué es
 
 **MAISON** es una experiencia e-commerce de lujo construida como SPA. Cada interacción usa física de resortes (spring physics), transiciones con desenfoque y glassmorphism para transmitir calidad a través de la interfaz. Incluye el flujo de compra completo: catálogo → producto → carrito → checkout de 5 pasos → confirmación.
@@ -42,16 +40,19 @@ Requiere Node.js 20+.
 
 ## Recursos (imágenes)
 
-Las 13 fotografías editoriales y de producto viven en `public/images/` y fueron generadas con IA con un grading cálido coherente (crema, champagne, terracotta). Si clonas el repo y falta esa carpeta, restaurala desde el paquete comprimido incluido en `release/` (ver abajo).
+Las 13 fotografías editoriales y de producto (hero, editorial, 3 categorías y 8 productos) fueron generadas con IA con un grading cálido coherente (crema, champagne, terracotta). Van en `public/images/` con estos nombres:
 
-## Paquete completo (.zip)
-
-En `release/` encontrarás el proyecto completo comprimido (código + imágenes), codificado en base64 en partes por límites de la API. Para restaurarlo:
-
-```bash
-bash release/restore-zip.sh        # genera maison-tienda-moda.zip
-unzip maison-tienda-moda.zip
 ```
+public/images/
+├── hero.png            # Hero home (16:9)
+├── editorial.png       # Sección lookbook (3:2)
+├── cat-mujer.png       # Categorías (2:3)
+├── cat-hombre.png
+├── cat-accesorios.png
+└── p1.png … p8.png     # Productos (2:3)
+```
+
+> **Nota:** este repo se subió mediante la API de GitHub, que solo admite texto; los binarios (imágenes) y el paquete `.zip` completo se entregan aparte. Coloca las imágenes en `public/images/` y el proyecto funciona tal cual. Si prefieres sustituirlas por fotografía propia, basta reemplazar los archivos manteniendo los nombres.
 
 ## Estructura
 
@@ -61,7 +62,6 @@ src/
 │   ├── layout/       Header, Footer
 │   ├── product/      ProductCard, QuickView, Selectors
 │   ├── cart/         MiniCart (drawer)
-│   ├── ui/           shadcn/ui (base)
 │   ├── Preloader.tsx
 │   └── Toasts.tsx
 ├── pages/            Home, Catalogo, Producto, Carrito, Checkout
@@ -70,6 +70,8 @@ src/
 ├── hooks/
 └── index.css         Design tokens MAISON
 ```
+
+La carpeta `src/components/ui/` de shadcn/ui no es necesaria: el código de MAISON no la importa. Si quieres añadir componentes base, usa `npx shadcn@latest add <componente>` (la configuración ya está en `components.json`).
 
 ## Design tokens
 
