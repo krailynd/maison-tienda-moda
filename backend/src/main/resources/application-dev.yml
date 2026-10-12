@@ -1,0 +1,220 @@
+spring:
+  application:
+    name: fashion-ecommerce
+
+  # PostgreSQL datasource (env-backed, D9).
+  # DB_PASSWORD has NO default on purpose: the app must fail fast rather than
+  # start against a well-known password. Copy .env.example to .env and fill it.
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fashion_ecommerce}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: America/Lima
+  
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+  
+  jpa:
+    hibernate:
+      # V1__initial_schema.sql is the source of truth for the schema (Flyway).
+      # `validate` is disabled because the JPA entities still drift from the
+      # hand-written V1 DDL (e.g. User.role vs users.role_id); schema integrity
+      # is enforced by Flyway validate-on-migrate instead.
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        use_sql_comments: true
+    open-in-view: false
+  
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+  
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+  
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          max-interval: 10000
+  
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+  
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+    encoding:
+      charset: UTF-8
+      force: true
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,application/json,application/javascript
+    min-response-size: 1024
+  forward-headers-strategy: framework
+  
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.fashion.ecommerce: ${LOG_LEVEL_APP:DEBUG}
+    org.springframework.web: INFO
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE_PATH:/var/log/fashion-ecommerce}/application.log
+    max-size: ${LOG_MAX_FILE_SIZE:10MB}
+    max-history: ${LOG_MAX_HISTORY:30}
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,threaddump,heapdump,env,beans,configprops
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_ENDPOINTS_HEALTH_SHOW_DETAILS:always}
+      probes:
+        enabled: true
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+  health:
+    # Mail is a stub in S1 (no SMTP credentials) — exclude its health indicator.
+    mail:
+      enabled: ${MANAGEMENT_HEALTH_MAIL_ENABLED:false}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+  
+  jwt:
+    # No default: a published JWT secret would let anyone forge tokens.
+    # Must be >= 32 bytes; generate with: openssl rand -base64 48
+    secret: ${JWT_SECRET}
+    expiration-ms: ${JWT_EXPIRATION_MS:900000}
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+    issuer: ${JWT_ISSUER:fashion-ecommerce}
+    audience: ${JWT_AUDIENCE:fashion-ecommerce-api}
+
+  # Admin bootstrap (admin-auth slice): when ADMIN_DEFAULT_PASSWORD is set,
+  # AdminPasswordResetRunner encodes it (BCrypt 12) and sets
+  # users.password_hash for admin@fashion.com at startup.
+  # Left empty by default: an unpublished default admin password is a
+  # guaranteed takeover. Set it explicitly, then change it after first login.
+  admin:
+    default-password: ${ADMIN_DEFAULT_PASSWORD:}
+
+  # Admin images (slice C): local host directory for uploaded product files,
+  # served back at /uploads/** (WebConfig). Created lazily on first write.
+  uploads:
+    dir: ${UPLOADS_DIR:./uploads}
+
+  stripe:
+    # No defaults. Empty means the Stripe integration stays unconfigured.
+    api-key: ${STRIPE_API_KEY:}
+    publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    currency: ${STRIPE_CURRENCY:pen}
+    success-url: ${STRIPE_SUCCESS_URL:http://localhost:3000/checkout/success?session_id={CHECKOUT_SESSION_ID}}
+    cancel-url: ${STRIPE_CANCEL_URL:http://localhost:3000/checkout/cancel}
+  
+  paypal:
+    client-id: ${PAYPAL_CLIENT_ID:}
+    client-secret: ${PAYPAL_CLIENT_SECRET:}
+    mode: ${PAYPAL_MODE:sandbox}
+    currency: ${PAYPAL_CURRENCY:USD}
+    return-url: ${PAYPAL_RETURN_URL:http://localhost:3000/checkout/paypal/success}
+    cancel-url: ${PAYPAL_CANCEL_URL:http://localhost:3000/checkout/paypal/cancel}
+  
+  cloudinary:
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+    folder: ${CLOUDINARY_FOLDER:fashion-ecommerce}
+  
+  rate-limit:
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:100}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+    login-max-attempts: ${RATE_LIMIT_LOGIN_MAX_ATTEMPTS:5}
+    login-window-minutes: ${RATE_LIMIT_LOGIN_WINDOW_MINUTES:15}
+  
+  shipping:
+    # REQ-CART-005: standard shipping S/25, free above S/500
+    free-threshold: ${SHIPPING_FREE_THRESHOLD:500.00}
+    standard-cost: ${SHIPPING_STANDARD_COST:25.00}
+    express-cost: ${SHIPPING_EXPRESS_COST:25.00}
+    pickup-cost: ${SHIPPING_PICKUP_COST:0.00}
+  
+  loyalty:
+    points-per-sol: ${LOYALTY_POINTS_PER_SOL:1}
+    points-value: ${LOYALTY_POINTS_VALUE:0.10}
+    min-redemption: ${LOYALTY_MIN_REDEMPTION:100}
+  
+  features:
+    new-checkout-enabled: ${FEATURE_NEW_CHECKOUT_ENABLED:true}
+    loyalty-program-enabled: ${FEATURE_LOYALTY_PROGRAM_ENABLED:true}
+    preorders-enabled: ${FEATURE_PREORDERS_ENABLED:false}
+    bnpl-enabled: ${FEATURE_BNPL_ENABLED:false}
