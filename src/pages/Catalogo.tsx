@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, LayoutGrid, Rows3 } from 'lucide-react';
-import { PRODUCTS, CATEGORIES } from '@/lib/data';
+import { useCategories, useProducts } from '@/hooks/useApi';
 import ProductCard from '@/components/product/ProductCard';
 import { staggerContainer, staggerItem, pageEnter } from '@/lib/animations';
 
@@ -29,11 +29,13 @@ export default function Catalogo() {
   const [sortOpen, setSortOpen] = useState(false);
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
-  const catInfo = CATEGORIES.find((c) => c.slug === categoria);
+  const { products: allProducts, loading } = useProducts(50);
+  const { categories } = useCategories();
+  const catInfo = categories.find((c) => c.slug === categoria);
   const title = catInfo?.title ?? (filtro === 'ofertas' ? 'Ofertas' : filtro === 'nuevo' ? 'Nuevo' : 'Colecciones');
 
   const products = useMemo(() => {
-    let list = [...PRODUCTS];
+    let list = [...allProducts];
     if (categoria) list = list.filter((p) => p.category === categoria);
     if (filtro === 'nuevo') list = list.filter((p) => p.isNew);
     if (filtro === 'ofertas') list = list.filter((p) => p.isSale);
@@ -43,7 +45,7 @@ export default function Catalogo() {
       case 'nuevo': list.sort((a, b) => Number(b.isNew ?? false) - Number(a.isNew ?? false)); break;
     }
     return list;
-  }, [categoria, filtro, sort]);
+  }, [allProducts, categoria, filtro, sort]);
 
   return (
     <motion.main variants={pageEnter} initial="hidden" animate="visible" exit="exit" className="pb-8">
@@ -164,7 +166,10 @@ export default function Catalogo() {
           </motion.div>
         ))}
       </motion.div>
-      {products.length === 0 && (
+      {loading && (
+        <p className="mt-20 text-center text-maison-warmgray">Cargando productos…</p>
+      )}
+      {!loading && products.length === 0 && (
         <p className="mt-20 text-center text-maison-warmgray">No hay productos en esta selección.</p>
       )}
     </motion.main>

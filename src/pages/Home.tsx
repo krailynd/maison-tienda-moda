@@ -4,10 +4,11 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight, ArrowDown, Check } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { PRODUCTS, CATEGORIES } from '@/lib/data';
-import ProductCard from '@/components/product/ProductCard';
 import { fadeUp, staggerContainer, staggerItem } from '@/lib/animations';
+import { CATEGORIES } from '@/lib/data';
 import { useUIStore } from '@/stores/uiStore';
+import { useCategories, useProducts } from '@/hooks/useApi';
+import ProductCard from '@/components/product/ProductCard';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -86,6 +87,8 @@ function Hero() {
 }
 
 function Categories() {
+  const { categories, loading } = useCategories();
+
   return (
     <motion.section
       variants={staggerContainer(0.12)}
@@ -101,7 +104,7 @@ function Categories() {
         Categorías
       </motion.h2>
       <div className="mt-10 grid gap-6 md:grid-cols-3">
-        {CATEGORIES.map((cat) => (
+        {(loading ? CATEGORIES : categories).map((cat) => (
           <motion.div key={cat.slug} variants={staggerItem}>
             <Link to={`/catalogo/${cat.slug}`} className="group relative block overflow-hidden rounded-[32px]">
               <img
@@ -129,7 +132,8 @@ function Categories() {
 }
 
 function Featured() {
-  const featured = PRODUCTS.filter((p) => p.isNew || p.isSale).slice(0, 6);
+  const { products, loading } = useProducts();
+  const featured = products.filter((p) => p.isNew || p.isSale).slice(0, 6);
   const dragRef = useRef<HTMLDivElement>(null);
   const [dragWidth, setDragWidth] = useState(0);
 
@@ -140,7 +144,7 @@ function Featured() {
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, []);
+  }, [featured.length]);
 
   return (
     <section className="pt-24">
@@ -169,6 +173,10 @@ function Featured() {
           ))}
         </motion.div>
       </div>
+      {loading && <p className="mt-10 pl-5 text-sm text-maison-warmgray md:pl-[max(2rem,calc((100vw-80rem)/2+2rem))]">Cargando productos…</p>}
+      {!loading && featured.length === 0 && (
+        <p className="mt-10 pl-5 text-sm text-maison-warmgray md:pl-[max(2rem,calc((100vw-80rem)/2+2rem))]">Aún no hay novedades.</p>
+      )}
     </section>
   );
 }
