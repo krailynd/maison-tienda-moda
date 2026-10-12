@@ -7,11 +7,12 @@ export interface CartItem {
   color: string;
   size: string;
   qty: number;
+  variantId?: number;
 }
 
 interface CartState {
   items: CartItem[];
-  addItem: (product: Product, color: string, size: string, qty?: number) => void;
+  addItem: (product: Product, color: string, size: string, qty?: number, variantId?: number) => void;
   removeItem: (id: string, color: string, size: string) => void;
   updateQty: (id: string, color: string, size: string, qty: number) => void;
   clear: () => void;
@@ -23,18 +24,20 @@ export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
       items: [],
-      addItem: (product, color, size, qty = 1) =>
+      addItem: (product, color, size, qty = 1, variantId) =>
         set((s) => {
           const k = key(product.id, color, size);
           const existing = s.items.find((i) => key(i.product.id, i.color, i.size) === k);
           if (existing) {
             return {
               items: s.items.map((i) =>
-                key(i.product.id, i.color, i.size) === k ? { ...i, qty: i.qty + qty } : i
+                key(i.product.id, i.color, i.size) === k
+                  ? { ...i, qty: i.qty + qty, variantId: variantId ?? i.variantId }
+                  : i
               ),
             };
           }
-          return { items: [...s.items, { product, color, size, qty }] };
+          return { items: [...s.items, { product, color, size, qty, variantId }] };
         }),
       removeItem: (id, color, size) =>
         set((s) => ({ items: s.items.filter((i) => key(i.product.id, i.color, i.size) !== key(id, color, size)) })),

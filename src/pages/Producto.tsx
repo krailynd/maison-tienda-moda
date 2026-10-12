@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Star, Heart, ChevronDown, Check, Truck, RotateCcw, ShieldCheck } from 'lucide-react';
-import { PRODUCTS, formatPrice } from '@/lib/data';
+import { formatPrice } from '@/lib/data';
+import { resolveVariant } from '@/lib/api';
+import { useProduct, useProducts } from '@/hooks/useApi';
 import { useCartStore } from '@/stores/cartStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ColorSwatches, SizeSelector, QtyStepper } from '@/components/product/Selectors';
@@ -42,7 +44,8 @@ function Accordion({ title, children, defaultOpen = false }: { title: string; ch
 
 export default function Producto() {
   const { slug } = useParams();
-  const product = PRODUCTS.find((p) => p.slug === slug);
+  const { product, loading, error } = useProduct(slug);
+  const { products: allProducts } = useProducts(50);
   const addItem = useCartStore((s) => s.addItem);
   const { pushToast, setCartOpen, wishlist, toggleWishlist } = useUIStore();
 
@@ -62,13 +65,24 @@ export default function Producto() {
       setQty(1);
       setAdding('idle');
     }
-  }, [slug]);
+  }, [slug, product]);
 
-  if (!product) {
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="font-serif-display text-3xl text-maison-ink">Cargando producto…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !product) {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <p className="font-serif-display text-3xl text-maison-ink">Producto no encontrado</p>
+          {error && <p className="mt-3 text-sm text-maison-warmgray">{error}</p>}
           <Link to="/catalogo" className="mt-4 inline-block text-sm text-maison-warmgray underline">
             Volver al catálogo
           </Link>
@@ -78,7 +92,9 @@ export default function Producto() {
   }
 
   const wished = wishlist.includes(product.id);
-  const related = PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
+  const related = allProducts
+    .filter((p) => p.category === product.category && p.id !== product.id)
+    .slice(0, 4);
 
   const onZoomMove = (e: React.MouseEvent) => {
     const rect = imgRef.current?.getBoundingClientRect();
@@ -96,7 +112,8 @@ export default function Producto() {
     }
     setAdding('loading');
     setTimeout(() => {
-      addItem(product, color, size, qty);
+      const variant = resolveVariant(product, color, size);
+      addItem(product, color, size, qty, variant?.id);
       setAdding('done');
       pushToast('success', 'Añadido a tu bolsa');
       setTimeout(() => {
@@ -150,7 +167,7 @@ export default function Producto() {
         <motion.div variants={staggerContainer(0.08)} initial="hidden" animate="visible">
           <motion.div variants={staggerItem}>
             <span className="glass inline-block rounded-full px-4 py-1.5 text-xs text-maison-soft">
-              {product.category.charAt(0).toUpperCase() + product.category.slice(1)} / {product.name}
+              {(product.categoryName ?? product.category ?? 'General').replace(/^\w/, (c) => c.toUpperCase())} / {product.name}
             </span>
           </motion.div>
           <motion.h1 variants={staggerItem} className="mt-4 font-serif-display text-[32px] leading-[1.1] text-maison-ink">
@@ -264,7 +281,8 @@ export default function Producto() {
                 pushToast('error', 'Selecciona una talla');
                 return;
               }
-              addItem(product, color, size, qty);
+              const variant = resolveVariant(product, color, size);
+              addItem(product, color, size, qty, variant?.id);
               setCartOpen(true);
             }}
             className="mt-3 w-full rounded-full border-[1.5px] border-maison-ink py-4 text-[13px] font-medium uppercase tracking-[0.08em] text-maison-ink transition-all duration-300 hover:bg-maison-ink hover:text-white"

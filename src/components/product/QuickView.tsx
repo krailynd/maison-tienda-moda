@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Star } from 'lucide-react';
-import { PRODUCTS, formatPrice } from '@/lib/data';
+import { formatPrice } from '@/lib/data';
+import { resolveVariant } from '@/lib/api';
+import { useProduct } from '@/hooks/useApi';
 import { useUIStore } from '@/stores/uiStore';
 import { useCartStore } from '@/stores/cartStore';
 import { ColorSwatches, SizeSelector } from './Selectors';
@@ -10,7 +12,7 @@ import { ColorSwatches, SizeSelector } from './Selectors';
 export default function QuickView() {
   const { quickViewSlug, setQuickView, pushToast, setCartOpen } = useUIStore();
   const addItem = useCartStore((s) => s.addItem);
-  const product = PRODUCTS.find((p) => p.slug === quickViewSlug) ?? null;
+  const { product } = useProduct(quickViewSlug ?? undefined);
   const [color, setColor] = useState('');
   const [size, setSize] = useState<string | null>(null);
 
@@ -19,7 +21,7 @@ export default function QuickView() {
       setColor(product.colors[0].name);
       setSize(null);
     }
-  }, [quickViewSlug]);
+  }, [quickViewSlug, product]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setQuickView(null);
@@ -96,7 +98,8 @@ export default function QuickView() {
                         pushToast('error', 'Selecciona una talla');
                         return;
                       }
-                      addItem(product, color, size);
+                      const variant = resolveVariant(product, color, size);
+                      addItem(product, color, size, 1, variant?.id);
                       pushToast('success', 'Añadido a tu bolsa');
                       setQuickView(null);
                       setCartOpen(true);

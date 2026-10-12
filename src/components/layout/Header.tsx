@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, User, Heart, ShoppingBag, Menu, X } from 'lucide-react';
 import { useCartTotals } from '@/stores/cartStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useAuthStore } from '@/stores/authStore';
 import { CATEGORIES } from '@/lib/data';
 import { springBounce } from '@/lib/animations';
 
@@ -20,8 +21,14 @@ export default function Header() {
   const [megaOpen, setMegaOpen] = useState(false);
   const megaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { count } = useCartTotals();
-  const { wishlist, setCartOpen, mobileMenuOpen, setMobileMenuOpen } = useUIStore();
+  const { wishlist, setCartOpen, setWishlistOpen, mobileMenuOpen, setMobileMenuOpen, setAuthOpen } = useUIStore();
+  const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
+
+  const openAccount = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setAuthOpen(true, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50);
@@ -101,10 +108,16 @@ export default function Header() {
             <button aria-label="Buscar" onClick={() => navigate('/catalogo')} className="hidden sm:block text-maison-ink transition-all duration-200 hover:scale-110">
               <Search size={22} strokeWidth={1.5} />
             </button>
-            <button aria-label="Cuenta" className="hidden sm:block text-maison-ink transition-all duration-200 hover:scale-110">
-              <User size={22} strokeWidth={1.5} />
+            <button aria-label="Cuenta" onClick={openAccount} className="hidden sm:block text-maison-ink transition-all duration-200 hover:scale-110">
+              {user ? (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-maison-ink text-sm font-medium text-white">
+                  {user.firstName.charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <User size={22} strokeWidth={1.5} />
+              )}
             </button>
-            <button aria-label="Favoritos" className="relative text-maison-ink transition-all duration-200 hover:scale-110">
+            <button aria-label="Favoritos" onClick={() => setWishlistOpen(true)} className="relative text-maison-ink transition-all duration-200 hover:scale-110">
               <Heart size={22} strokeWidth={1.5} />
               <AnimatePresence>
                 {wishlist.length > 0 && (
@@ -239,6 +252,21 @@ export default function Header() {
                     </Link>
                   </motion.div>
                 ))}
+                <motion.div
+                  initial={{ x: 20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.08 + NAV.length * 0.05 }}
+                >
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setAuthOpen(true);
+                    }}
+                    className="font-serif-display text-3xl text-maison-ink"
+                  >
+                    {user ? `Hola, ${user.firstName}` : 'Cuenta'}
+                  </button>
+                </motion.div>
               </nav>
             </motion.div>
           </>

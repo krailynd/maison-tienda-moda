@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, CreditCard, Truck, Zap, ShieldCheck, RotateCcw, ShoppingBag, Copy } from 'lucide-react';
+import { Check, CreditCard, Truck, Zap, ShieldCheck, RotateCcw, ShoppingBag } from 'lucide-react';
 import { useCartStore, useCartTotals } from '@/stores/cartStore';
+import { useUIStore } from '@/stores/uiStore';
 import { formatPrice } from '@/lib/data';
+import { createOrder, getErrorMessage, payOrder, resolveCheckoutItems } from '@/lib/api';
 import { pageEnter } from '@/lib/animations';
 
 const STEPS = ['Envío', 'Método', 'Pago', 'Revisar', 'Confirmar'];
@@ -75,22 +77,27 @@ function Field({
 export default function Checkout() {
   const { items, clear } = useCartStore();
   const { subtotal } = useCartTotals();
+  const { pushToast } = useUIStore();
   const [step, setStep] = useState(0);
   const [shipMethod, setShipMethod] = useState<'standard' | 'express'>('standard');
   const [payMethod, setPayMethod] = useState<'card' | 'yape'>('card');
-  const [form, setForm] = useState({ nombre: '', email: '', direccion: '', ciudad: '', tarjeta: '', venc: '', cvv: '' });
+  const [form, setForm] = useState({
+    nombre: '', apellido: '', email: '', telefono: '', direccion: '', direccion2: '',
+    ciudad: '', region: '', codigoPostal: '', tarjeta: '', venc: '', cvv: '',
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const shipping = shipMethod === 'express' ? 39 : subtotal >= 500 ? 0 : 25;
   const total = subtotal + shipping;
-  const orderNumber = useMemo(() => `MA-${Math.floor(100000 + Math.random() * 900000)}`, []);
 
   const next = () => {
     if (step === 0) {
       const e: Record<string, string> = {};
       if (form.nombre.trim().length < 3) e.nombre = 'Ingresa tu nombre completo';
+      if (form.apellido.trim().length < 2) e.apellido = 'Ingresa tu apellido';
       if (!form.email.includes('@')) e.email = 'Ingresa un correo válido';
       if (form.direccion.trim().length < 5) e.direccion = 'Ingresa una dirección válida';
       if (!form.ciudad.trim()) e.ciudad = 'Ingresa tu ciudad';
@@ -106,8 +113,49 @@ export default function Checkout() {
       if (Object.keys(e).length) return;
     }
     setErrors({});
-    if (step === 3) clear();
-    setStep((s) => Math.min(4, s + 1));
+    setStep((s) => Math.min(3, s + 1));
+  };
+
+  const confirmOrder = async () => {
+    if (items.length === 0) {
+      pushToast('error', 'Tu bolsa está vacía');
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const resolved = await resolveCheckoutItems(items);
+      const order = await createOrder({
+        items: resolved.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.qty })),
+        customer: {
+          firstName: form.nombre.trim(),
+          lastName: form.apellido.trim(),
+          email: form.email.trim(),
+          phone: form.telefono.trim() || undefined,
+          addressLine1: form.direccion.trim(),
+          addressLine2: form.direccion2.trim() || undefined,
+          city: form.ciudad.trim(),
+          region: form.region.trim() || undefined,
+          postalCode: form.codigoPostal.trim() || undefined,
+          countryCode: 'PE',
+        },
+        shippingMethodId: null,
+        notes: '',
+      });
+      const payment = await payOrder(order.orderNumber, 'CARD');
+      if (payment.status !== 'PAID') {
+        throw new Error(`El pago no se completó (${payment.status}).`);
+      }
+      setStep(4);
+      clear();
+      navigate(`/confirmacion?order=${encodeURIComponent(order.orderNumber)}`);
+    } catch (e) {
+      const message = getErrorMessage(e);
+      setSubmitError(message);
+      pushToast('error', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (items.length === 0 && step < 4) {
@@ -140,21 +188,32 @@ export default function Checkout() {
             <motion.div key="s0" {...slide}>
               <h1 className="font-serif-display text-3xl text-maison-ink">Datos de envío</h1>
               <div className="mt-8 grid gap-5 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <Field label="Nombre completo" placeholder="Ana María Torres" value={form.nombre} error={errors.nombre}
-                    onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-                </div>
+                <Field label="Nombre" placeholder="Ana María" value={form.nombre} error={errors.nombre}
+                  onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+                <Field label="Apellido" placeholder="Torres" value={form.apellido} error={errors.apellido}
+                  onChange={(e) => setForm({ ...form, apellido: e.target.value })} />
                 <div className="sm:col-span-2">
                   <Field label="Correo electrónico" type="email" placeholder="ana@correo.com" value={form.email} error={errors.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
                 <div className="sm:col-span-2">
+                  <Field label="Teléfono (opcional)" placeholder="+51 999 999 999" value={form.telefono}
+                    onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+                </div>
+                <div className="sm:col-span-2">
                   <Field label="Dirección" placeholder="Av. Ejemplo 123, Dpto 401" value={form.direccion} error={errors.direccion}
                     onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
                 </div>
+                <div className="sm:col-span-2">
+                  <Field label="Dirección 2 (opcional)" placeholder="Referencia, piso, urbanización" value={form.direccion2}
+                    onChange={(e) => setForm({ ...form, direccion2: e.target.value })} />
+                </div>
                 <Field label="Ciudad" placeholder="Lima" value={form.ciudad} error={errors.ciudad}
                   onChange={(e) => setForm({ ...form, ciudad: e.target.value })} />
-                <Field label="Código postal (opcional)" placeholder="15074" />
+                <Field label="Región (opcional)" placeholder="Lima" value={form.region}
+                  onChange={(e) => setForm({ ...form, region: e.target.value })} />
+                <Field label="Código postal (opcional)" placeholder="15074" value={form.codigoPostal}
+                  onChange={(e) => setForm({ ...form, codigoPostal: e.target.value })} />
               </div>
             </motion.div>
           )}
@@ -276,66 +335,13 @@ export default function Checkout() {
             </motion.div>
           )}
 
-          {/* STEP 4: Confirmación */}
+          {/* STEP 4: Procesando (redirige a la confirmación) */}
           {step === 4 && (
             <motion.div key="s4" {...slide} className="mx-auto max-w-lg text-center">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: [0, 1.2, 1] }}
-                transition={{ type: 'spring', stiffness: 200, damping: 14 }}
-                className="relative mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-maison-sage"
-              >
-                <svg viewBox="0 0 24 24" className="h-10 w-10 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                  <motion.path
-                    d="M5 13l4 4L19 7"
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                  />
-                </svg>
-                {/* Confetti */}
-                {Array.from({ length: 16 }).map((_, i) => (
-                  <motion.span
-                    key={i}
-                    initial={{ opacity: 1, x: 0, y: 0, scale: 0 }}
-                    animate={{
-                      opacity: 0,
-                      x: Math.cos((i / 16) * Math.PI * 2) * (60 + (i % 3) * 20),
-                      y: Math.sin((i / 16) * Math.PI * 2) * (60 + (i % 3) * 20) + 40,
-                      scale: 1,
-                    }}
-                    transition={{ duration: 2, ease: 'easeOut', delay: 0.2 }}
-                    className="absolute h-2.5 w-2.5 rounded-full"
-                    style={{ background: i % 3 === 0 ? '#D4B896' : i % 3 === 1 ? '#F5E6D3' : '#E8D4C0' }}
-                  />
-                ))}
-              </motion.div>
-              <h1 className="mt-8 font-serif-display text-4xl text-maison-ink">¡Gracias por tu compra!</h1>
-              <p className="mt-3 text-sm text-maison-warmgray">
-                Hemos enviado la confirmación a tu correo. Tu pedido llegará pronto.
-              </p>
-              <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(orderNumber);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                }}
-                className="group mt-6 inline-flex items-center gap-2 rounded-full bg-maison-gray px-6 py-3 text-sm font-medium text-maison-ink transition-colors hover:bg-maison-line"
-              >
-                Pedido {orderNumber}
-                {copied ? <Check size={16} className="text-maison-sage" /> : <Copy size={16} strokeWidth={1.5} />}
-              </button>
-              <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-                <button
-                  onClick={() => navigate('/catalogo')}
-                  className="rounded-full bg-grad-midnight px-10 py-4 text-[13px] font-medium uppercase tracking-[0.08em] text-white transition-shadow hover:shadow-glow"
-                >
-                  Seguir comprando
-                </button>
-                <button className="rounded-full border-[1.5px] border-maison-ink px-10 py-4 text-[13px] font-medium uppercase tracking-[0.08em] text-maison-ink transition-all hover:bg-maison-ink hover:text-white">
-                  Ver mis órdenes
-                </button>
-              </div>
+              <svg className="mx-auto h-12 w-12 animate-spin text-maison-ink" viewBox="0 0 24 24" fill="none" aria-label="Procesando">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="32" strokeDashoffset="10" strokeLinecap="round" />
+              </svg>
+              <p className="mt-6 font-serif-display text-2xl text-maison-ink">Confirmando tu pedido…</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -391,19 +397,24 @@ export default function Checkout() {
         <div className="mx-auto mt-12 flex max-w-3xl justify-between pb-4">
           <button
             onClick={() => (step === 0 ? navigate('/carrito') : setStep((s) => s - 1))}
-            className="rounded-full border-[1.5px] border-maison-line px-8 py-3.5 text-[13px] font-medium uppercase tracking-[0.08em] text-maison-soft transition-all hover:border-maison-ink hover:text-maison-ink"
+            disabled={submitting}
+            className="rounded-full border-[1.5px] border-maison-line px-8 py-3.5 text-[13px] font-medium uppercase tracking-[0.08em] text-maison-soft transition-all hover:border-maison-ink hover:text-maison-ink disabled:opacity-50"
           >
             Volver
           </button>
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={next}
-            className="rounded-full bg-grad-midnight px-10 py-3.5 text-[13px] font-medium uppercase tracking-[0.08em] text-white transition-shadow hover:shadow-glow"
+            onClick={step === 3 ? confirmOrder : next}
+            disabled={submitting}
+            className="rounded-full bg-grad-midnight px-10 py-3.5 text-[13px] font-medium uppercase tracking-[0.08em] text-white transition-shadow hover:shadow-glow disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {step === 3 ? 'Confirmar pedido' : 'Continuar'}
+            {submitting ? 'Procesando…' : step === 3 ? 'Confirmar pedido' : 'Continuar'}
           </motion.button>
         </div>
+      )}
+      {submitError && step < 4 && (
+        <p className="mx-auto mt-4 max-w-3xl text-center text-sm text-maison-terracotta">{submitError}</p>
       )}
     </motion.main>
   );
