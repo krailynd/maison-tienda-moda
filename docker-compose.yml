@@ -1,0 +1,116 @@
+# =============================================================================
+# FASHION E-COMMERCE - LOCAL STACK (Slice S1)
+# PostgreSQL 16 + Redis 7 + RabbitMQ + Backend (8080 app / 8081 actuator)
+# The frontend (nginx) service is added in a later slice (S3+).
+#
+# All credentials come from the environment. Copy .env.example to .env and
+# fill it in first — the ${VAR:?...} syntax fails loudly when a value is
+# missing, instead of silently booting with a well-known password.
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fashion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fashion_ecommerce
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD in .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - fashion-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: fashion-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?define REDIS_PASSWORD in .env}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - fashion-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "--pass", "${REDIS_PASSWORD}", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: fashion-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?define RABBITMQ_PASSWORD in .env}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    networks:
+      - fashion-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fashion-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      # Datasource (matches the env-backed keys in application-dev.yml)
+      DB_URL: jdbc:postgresql://postgres:5432/fashion_ecommerce
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD in .env}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?define REDIS_PASSWORD in .env}
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?define RABBITMQ_PASSWORD in .env}
+      # CORS
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+      # JWT signing key — required. Generate with: openssl rand -base64 48
+      JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET in .env}
+    ports:
+      - "8080:8080"
+      - "8081:8081" # Actuator
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fashion-network
+
+networks:
+  fashion-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local

@@ -22,3 +22,29 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Entorno: nunca commitear secretos reales
+.env
+.env.*
+!.env.example
+
+# Java / Spring Boot
+backend/target/
+target/
+*.class
+*.jar
+*.war
+
+# Eclipse / STS
+.classpath
+.project
+.factorypath
+.settings/
+
+# Uploads de imagenes en desarrollo
+backend/uploads/
+uploads/
+
+# Base de datos local
+*.db
+*.sqlite
